@@ -1,0 +1,162 @@
+#!/usr/bin/perl
+# ybacklight - an xbacklight compatible replacement using sysfs.
+# Copyright (c) 2017 Sebastian Schmidt <yath@yath.de>
+# Licensed under the terms of the GNU GPL Version 2.
+use strict;
+use warnings;
+use feature qw(say);
+
+use File::Util;
+use File::Spec;
+
+use constant SYSFS_DIR => "/sys/class/backlight/";
+
+my $verbose = 0;
+
+sub usage {
+    my ($err) = @_; # optional
+    my $rc = do {
+        if ($err) {
+            select STDERR;
+            say "Error: $err";
+            1
+        } else {
+            0
+        }
+    };
+
+    print <<EOU;
+Usage: $0 [options]
+  Options:
+  -d <driver> or -driver <driver>: Use driver <driver> (NB: -display is
+                                   also supported for compatibility)
+  -help: Print this help
+  -set <percentage> or = <percentage>: Set backlight to <percentage>
+  -inc <percentage> or + <percentage>: Increase backlight by <percentage>
+  -dec <percentage> or - <percentage>: Decrease backlight by <percentage>
+  -get: Get backlight percentage
+  -time <ignored> or -steps <ignored>: Unsupported, ignored
+  -v: Verbose output
+EOU
+    exit $rc;
+}
+
+sub get_drivers {
+    return sort File::Util->new->list_dir(SYSFS_DIR, qw(--no-fsdots));
+}
+
+sub get_numeric_attribute {
+    my ($driver, $attribute) = @_;
+    my $path = File::Spec->catfile(SYSFS_DIR, $driver, $attribute);
+    my $data = File::Util->new->load_file($path);
+    
+    die "Can't parse '$data' from $path" unless $data =~ /^(\d+)\n*$/;
+    return $1+0;
+}
+
+sub set_attribute {
+    my ($driver, $attribute, $value) = @_;
+    my $path = File::Spec->catfile(SYSFS_DIR, $driver, $attribute);
+    File::Util->new->write_file(filename => $path, content => $value);
+}
+
+sub get_percentage {
+    my ($driver) = @_;
+    my $bri = get_numeric_attribute($driver, "brightness");
+    my $bri_max = get_numeric_attribute($driver, "max_brightness");
+    my $pct = int($bri/$bri_max*100);
+    say "Current brightness $bri/$bri_max ($pct%)" if $verbose;
+    return $pct;
+}
+
+sub set_percentage {
+    my ($driver, $pct) = @_;
+    if ($pct < 0) {
+        warn "Percentage cut at 0\n";
+        $pct = 0;
+    } elsif ($pct > 100) {
+        warn "Percentage cut at 100\n";
+        $pct = 100;
+    }
+    my $bri_max = get_numeric_attribute($driver, "max_brightness");
+    my $bri_new = int($bri_max/100*$pct); 
+    say "Setting brightness to $bri_new/$bri_max ($pct%)" if $verbose;
+    set_attribute($driver, "brightness", $bri_new);
+    return $pct;
+}
+
+my %actions = (
+    inc => '+',
+    dec => '-',
+    set => '=',
+);
+
+my $driver;
+my $action;
+# xbacklight uses weird single-dash multi-letter dashes, and Getopt::Long is
+# already a pain to configure, so just parse @ARGV manually.
+for (my $i = 0; $i <= $#ARGV; $i++) {
+    my $opt = $ARGV[$i];
+    my $optarg = $ARGV[$i+1]; # used optionally
+    if ($opt =~ /^-d(?:isplay|river)?$/) {
+        warn "Driver already defined, overriding" if $driver;
+        usage "$opt requires an argument" unless $optarg;
+        $i++; # consume $optarg
+        if ($optarg =~ /:\d/) {
+            warn "Driver '$optarg' looks like an X \$DISPLAY string, ignoring\n";
+            next;
+        }
+        $driver = $optarg;
+    } elsif ($opt =~ /^-(set|inc|dec)$/) {
+        usage "Only one action allowed" if $action;
+        $action = $actions{$1}; # +/-/=
+
+        usage "$opt requires an argument" unless $optarg;
+        usage "$opt requires a numerical argument" unless $optarg =~ /^(\d+)%?$/;
+        $action .= $1; # add percentage to action sign
+        $i++; # consume $optarg
+    } elsif ($opt eq "-get") {
+        usage "Only one action allowed" if $action;
+        $action = "get";
+    } elsif ($opt =~ /^-(time|steps)$/) {
+        warn "$opt not supported, ignoring\n";
+        $i++ if $optarg; # both have an argument
+    } elsif ($opt =~ /^([-=+]\d+)%?$/) {
+        usage "Only one action allowed" if $action;
+        $action = $1;
+    } elsif ($opt =~ /^-h(?:elp)?$/) {
+        usage;
+    } elsif ($opt =~ /^-v(?:erbose)?$/) {
+        $verbose = 1;
+    } else {
+        usage "Don't understand '$opt'";
+    }
+
+
+}
+
+unless ($driver) {
+    my @drivers = get_drivers;
+    say "Available drivers: @drivers" if $verbose;
+    $driver = $drivers[0];
+    if (@drivers > 1) {
+        local $" = ", ";
+        warn "More than one driver found (@drivers), using first ($driver)\n";
+    } elsif (@drivers == 0) {
+        die "No driver found\n";
+    }
+}
+
+say "Invoking action '$action' on driver '$driver'" if $verbose;
+my $curr = get_percentage($driver);
+if ($action eq "get") {
+    say $curr;
+} elsif ($action =~ /^\+(\d+)$/) {
+    say set_percentage($driver, $curr + $1);
+} elsif ($action =~ /^-(\d+)$/) {
+    say set_percentage($driver, $curr - $1);
+} elsif ($action =~ /^=(\d+)$/) {
+    say set_percentage($driver, $1);
+} else {
+    die "should not be here";
+}
