@@ -64,7 +64,7 @@ sub get_percentage {
     my ($driver) = @_;
     my $bri = get_numeric_attribute($driver, "brightness");
     my $bri_max = get_numeric_attribute($driver, "max_brightness");
-    my $pct = int($bri/$bri_max*100);
+    my $pct = ($bri/$bri_max*100);
     say "Current brightness $bri/$bri_max ($pct%)" if $verbose;
     return $pct;
 }
@@ -79,9 +79,9 @@ sub set_percentage {
         $pct = 100;
     }
     my $bri_max = get_numeric_attribute($driver, "max_brightness");
-    my $bri_new = int($bri_max/100*$pct); 
+    my $bri_new = ($bri_max/100*$pct);
     say "Setting brightness to $bri_new/$bri_max ($pct%)" if $verbose;
-    set_attribute($driver, "brightness", $bri_new);
+    set_attribute($driver, "brightness", int($bri_new));
     return $pct;
 }
 
