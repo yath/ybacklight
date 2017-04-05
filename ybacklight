@@ -64,8 +64,8 @@ sub get_percentage {
     my ($driver) = @_;
     my $bri = get_numeric_attribute($driver, "brightness");
     my $bri_max = get_numeric_attribute($driver, "max_brightness");
-    my $pct = ($bri/$bri_max*100);
-    say "Current brightness $bri/$bri_max ($pct%)" if $verbose;
+    my $pct = $bri/$bri_max*100;
+    say "Current brightness $bri/$bri_max (@{[int$pct]}%)" if $verbose;
     return $pct;
 }
 
@@ -80,7 +80,7 @@ sub set_percentage {
     }
     my $bri_max = get_numeric_attribute($driver, "max_brightness");
     my $bri_new = ($bri_max/100*$pct);
-    say "Setting brightness to $bri_new/$bri_max ($pct%)" if $verbose;
+    say "Setting brightness to $bri_new/$bri_max (@{[int$pct]}%)" if $verbose;
     set_attribute($driver, "brightness", int($bri_new));
     return $pct;
 }
@@ -150,13 +150,13 @@ unless ($driver) {
 say "Invoking action '$action' on driver '$driver'" if $verbose;
 my $curr = get_percentage($driver);
 if ($action eq "get") {
-    say $curr;
+    say int($curr);
 } elsif ($action =~ /^\+(\d+)$/) {
-    say set_percentage($driver, $curr + $1);
+    say int(set_percentage($driver, $curr + $1));
 } elsif ($action =~ /^-(\d+)$/) {
-    say set_percentage($driver, $curr - $1);
+    say int(set_percentage($driver, $curr - $1));
 } elsif ($action =~ /^=(\d+)$/) {
-    say set_percentage($driver, $1);
+    say int(set_percentage($driver, $1));
 } else {
     die "should not be here";
 }
