@@ -49,7 +49,7 @@ sub get_numeric_attribute {
     my ($driver, $attribute) = @_;
     my $path = File::Spec->catfile(SYSFS_DIR, $driver, $attribute);
     my $data = File::Util->new->load_file($path);
-    
+
     die "Can't parse '$data' from $path" unless $data =~ /^(\d+)\n*$/;
     return $1+0;
 }
