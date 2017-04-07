@@ -9,9 +9,30 @@ use feature qw(say);
 use File::Util;
 use File::Spec;
 
-use constant SYSFS_DIR => "/sys/class/backlight/";
-
+use constant { SYSFS_DIR => "/sys/class/backlight/",
+               PERCENTAGE_FMT => "%.1f" };
 my $verbose = 0;
+
+{
+    package Percent;
+
+    use overload '0+' => sub {
+        my ($self) = @_;
+        return $$self;
+    };
+
+    use overload '""' => sub {
+        my ($self) = @_;
+        return sprintf(::PERCENTAGE_FMT, $$self)
+    };
+
+    use overload 'fallback' => 1;
+
+    sub new {
+        my ($cls, $val) = @_;
+        return bless \$val, $cls;
+    }
+}
 
 sub usage {
     my ($err) = @_; # optional
@@ -49,7 +70,7 @@ sub get_numeric_attribute {
     my ($driver, $attribute) = @_;
     my $path = File::Spec->catfile(SYSFS_DIR, $driver, $attribute);
     my $data = File::Util->new->load_file($path);
-    
+
     die "Can't parse '$data' from $path" unless $data =~ /^(\d+)\n*$/;
     return $1+0;
 }
@@ -64,7 +85,7 @@ sub get_percentage {
     my ($driver) = @_;
     my $bri = get_numeric_attribute($driver, "brightness");
     my $bri_max = get_numeric_attribute($driver, "max_brightness");
-    my $pct = int($bri/$bri_max*100);
+    my $pct = Percent->new($bri/$bri_max*100);
     say "Current brightness $bri/$bri_max ($pct%)" if $verbose;
     return $pct;
 }
@@ -78,8 +99,10 @@ sub set_percentage {
         warn "Percentage cut at 100\n";
         $pct = 100;
     }
+    $pct = Percent->new($pct) unless ref $pct;
+
     my $bri_max = get_numeric_attribute($driver, "max_brightness");
-    my $bri_new = int($bri_max/100*$pct); 
+    my $bri_new = int($bri_max/100*$pct);
     say "Setting brightness to $bri_new/$bri_max ($pct%)" if $verbose;
     set_attribute($driver, "brightness", $bri_new);
     return $pct;
@@ -90,6 +113,7 @@ my %actions = (
     dec => '-',
     set => '=',
 );
+my $num_re = qr/\d+(?:\.\d*)?/;
 
 my $driver;
 my $action;
@@ -112,7 +136,7 @@ for (my $i = 0; $i <= $#ARGV; $i++) {
         $action = $actions{$1}; # +/-/=
 
         usage "$opt requires an argument" unless $optarg;
-        usage "$opt requires a numerical argument" unless $optarg =~ /^(\d+)%?$/;
+        usage "$opt requires a numerical argument" unless $optarg =~ /^($num_re)%?$/;
         $action .= $1; # add percentage to action sign
         $i++; # consume $optarg
     } elsif ($opt eq "-get") {
@@ -121,7 +145,7 @@ for (my $i = 0; $i <= $#ARGV; $i++) {
     } elsif ($opt =~ /^-(time|steps)$/) {
         warn "$opt not supported, ignoring\n";
         $i++ if $optarg; # both have an argument
-    } elsif ($opt =~ /^([-=+]\d+)%?$/) {
+    } elsif ($opt =~ /^([-=+]$num_re)%?$/) {
         usage "Only one action allowed" if $action;
         $action = $1;
     } elsif ($opt =~ /^-h(?:elp)?$/) {
@@ -151,11 +175,11 @@ say "Invoking action '$action' on driver '$driver'" if $verbose;
 my $curr = get_percentage($driver);
 if ($action eq "get") {
     say $curr;
-} elsif ($action =~ /^\+(\d+)$/) {
+} elsif ($action =~ /^\+($num_re)$/) {
     say set_percentage($driver, $curr + $1);
-} elsif ($action =~ /^-(\d+)$/) {
+} elsif ($action =~ /^-($num_re)$/) {
     say set_percentage($driver, $curr - $1);
-} elsif ($action =~ /^=(\d+)$/) {
+} elsif ($action =~ /^=($num_re)$/) {
     say set_percentage($driver, $1);
 } else {
     die "should not be here";
