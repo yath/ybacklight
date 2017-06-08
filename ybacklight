@@ -124,7 +124,7 @@ for (my $i = 0; $i <= $#ARGV; $i++) {
     my $optarg = $ARGV[$i+1]; # used optionally
     if ($opt =~ /^-d(?:isplay|river)?$/) {
         warn "Driver already defined, overriding" if $driver;
-        usage "$opt requires an argument" unless $optarg;
+        usage "$opt requires an argument" unless length $optarg;
         $i++; # consume $optarg
         if ($optarg =~ /:\d/) {
             warn "Driver '$optarg' looks like an X \$DISPLAY string, ignoring\n";
@@ -135,7 +135,7 @@ for (my $i = 0; $i <= $#ARGV; $i++) {
         usage "Only one action allowed" if $action;
         $action = $actions{$1}; # +/-/=
 
-        usage "$opt requires an argument" unless $optarg;
+        usage "$opt requires an argument" unless length $optarg;
         usage "$opt requires a numerical argument" unless $optarg =~ /^($num_re)%?$/;
         $action .= $1; # add percentage to action sign
         $i++; # consume $optarg
