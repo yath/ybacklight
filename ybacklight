@@ -155,9 +155,9 @@ for (my $i = 0; $i <= $#ARGV; $i++) {
     } else {
         usage "Don't understand '$opt'";
     }
-
-
 }
+
+$action||='get';
 
 unless ($driver) {
     my @drivers = get_drivers;
