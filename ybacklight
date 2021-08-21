@@ -6,8 +6,8 @@ use strict;
 use warnings;
 use feature qw(say);
 
-use File::Util;
 use File::Spec;
+use File::Basename;
 
 use constant { SYSFS_DIR => "/sys/class/backlight/",
                PERCENTAGE_FMT => "%.1f" };
@@ -63,13 +63,15 @@ EOU
 }
 
 sub get_drivers {
-    return sort File::Util->new->list_dir(SYSFS_DIR, qw(--no-fsdots));
+    return sort map basename($_), glob SYSFS_DIR."*";
 }
 
 sub get_numeric_attribute {
     my ($driver, $attribute) = @_;
     my $path = File::Spec->catfile(SYSFS_DIR, $driver, $attribute);
-    my $data = File::Util->new->load_file($path);
+    open my $fh, "<", $path or die $!;
+    my $data = <$fh>;
+    close $fh;
 
     die "Can't parse '$data' from $path" unless $data =~ /^(\d+)\n*$/;
     return $1+0;
@@ -78,7 +80,9 @@ sub get_numeric_attribute {
 sub set_attribute {
     my ($driver, $attribute, $value) = @_;
     my $path = File::Spec->catfile(SYSFS_DIR, $driver, $attribute);
-    File::Util->new->write_file(filename => $path, content => $value);
+    open my $fh, ">", $path or die $!;
+    print $fh $value;
+    close $fh;
 }
 
 sub get_percentage {
